@@ -1,0 +1,71 @@
+events {}
+
+http {
+
+  upstream ai_router {
+    server ai-router:4000;
+  }
+
+  upstream n8n_service {
+    server n8n:5678;
+  }
+
+  upstream cal_service {
+    server calcom:3000;
+  }
+
+  # =========================
+  # API Router
+  # =========================
+  server {
+    listen 80;
+    server_name api.codeco.tech;
+
+    location / {
+      proxy_pass http://ai_router;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /paymentsuccess {
+      proxy_pass http://ai_router/paymentsuccess;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+    }
+  }
+
+  # =========================
+  # n8n
+  # =========================
+  server {
+    listen 80;
+    server_name n8n.codeco.tech;
+
+    location / {
+      proxy_pass http://n8n_service;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+  }
+
+  # =========================
+  # Cal.com
+  # =========================
+  server {
+    listen 80;
+    server_name cal.codeco.tech;
+
+    location / {
+      proxy_pass http://cal_service;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+  }
+
+}

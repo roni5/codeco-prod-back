@@ -1,0 +1,54 @@
+import express from "express";
+import axios from "axios";
+import rateLimit from "express-rate-limit";
+import pino from "pino";
+
+const app = express();
+app.use(express.json());
+
+const logger = pino({ level: "info" });
+
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 100
+}));
+
+app.post("/chat", async (req, res) => {
+  const { message } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: "Message required" });
+  }
+
+  try {
+    const response = await axios.post(
+      "https://api.anthropic.com/v1/messages",
+      {
+        model: "claude-3-haiku-20240307",
+        max_tokens: 500,
+        messages: [{ role: "user", content: message }]
+      },
+      {
+        headers: {
+          "x-api-key": process.env.CLAUDE_API_KEY!,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        }
+      }
+    );
+
+    res.json(response.data);
+
+  } catch (err) {
+    logger.error(err);
+    res.status(500).json({ error: "Claude API error" });
+  }
+});
+
+app.get("/health", (_, res) => {
+  res.json({ status: "ok" });
+});
+
+app.listen(4000, () => {
+  logger.info("AI Router running on port 4000");
+});
