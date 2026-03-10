@@ -2,23 +2,39 @@ events {}
 
 http {
 
-  upstream ai_router { server ai-router:4000; }
-  upstream cal_service { server calcom:3000; }
+  upstream ai_router {
+    server ai-router:4000;
+  }
 
-  # API — redirect HTTP to HTTPS
+  upstream n8n_service {
+    server n8n:5678;
+  }
+
+  upstream cal_service {
+    server calcom:3000;
+  }
+
+  # ================================
+  # HTTP → HTTPS Redirect (API)
+  # ================================
   server {
     listen 80;
     server_name api.codeco.tech;
-    return 301 https://$host$request_uri;
+
+    location / {
+      return 301 https://$host$request_uri;
+    }
   }
 
-  # API — HTTPS
+  # ================================
+  # API (AI Router)
+  # ================================
   server {
     listen 443 ssl;
     server_name api.codeco.tech;
 
-    ssl_certificate /opt/codeco/certs/fullchain.pem;
-    ssl_certificate_key /opt/codeco/certs/privkey.pem;
+    ssl_certificate /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
 
     location = /health {
       default_type application/json;
@@ -27,46 +43,59 @@ http {
 
     location / {
       proxy_pass http://ai_router;
+
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header X-Forwarded-Proto $scheme;
+
       proxy_http_version 1.1;
       proxy_set_header Connection "";
     }
 
     location /paymentsuccess {
       proxy_pass http://ai_router/paymentsuccess;
+
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
       proxy_set_header X-Forwarded-Proto $scheme;
+
       proxy_http_version 1.1;
       proxy_set_header Connection "";
     }
   }
 
-  # Cal — redirect HTTP to HTTPS
+  # ================================
+  # n8n
+  # ================================
   server {
     listen 80;
-    server_name cal.codeco.tech;
-    return 301 https://$host$request_uri;
-  }
-
-  # Cal — HTTPS
-  server {
-    listen 443 ssl;
-    server_name cal.codeco.tech;
-
-    ssl_certificate /opt/codeco/certs/fullchain.pem;
-    ssl_certificate_key /opt/codeco/certs/privkey.pem;
+    server_name n8n.codeco.tech;
 
     location / {
-      proxy_pass http://cal_service;
+      proxy_pass http://n8n_service;
+
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_set_header X-Forwarded-Proto $scheme;
     }
   }
+
+  # ================================
+  # Cal.com
+  # ================================
+  server {
+    listen 80;
+    server_name cal.codeco.tech;
+
+    location / {
+      proxy_pass http://cal_service;
+
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+  }
+
 }
