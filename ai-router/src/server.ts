@@ -9,6 +9,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import nodemailer from "nodemailer";
 
 const app = express();
+app.set("trust proxy", true);
 const logger = pino({ level: "info" });
 
 /* =========================
@@ -132,7 +133,7 @@ app.post("/paymentsuccess", async (req, res) => {
         );
 
         const tx = nodemailer.createTransport({
-          host: "email-smtp.eu-west-1.amazonaws.com",
+          host: "email-smtp.eu-west-2.amazonaws.com",
           port: 587,
           secure: false,
           requireTLS: true,
