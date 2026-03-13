@@ -9,54 +9,8 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import nodemailer from "nodemailer";
 
 const app = express();
-app.set('trust proxy', 1);
+app.set("trust proxy", true);
 const logger = pino({ level: "info" });
-
-/* =========================
-   MAIL HELPERS (SES SMTP)
-========================= */
-const mailTransport = nodemailer.createTransport({
-  host: "email-smtp.eu-west-2.amazonaws.com",
-  port: 587,
-  secure: false,
-  requireTLS: true,
-  auth: {
-    user: process.env.AWS_SES_SMTP_USER!,
-    pass: process.env.AWS_SES_SMTP_PASSWORD!
-  }
-});
-
-async function sendMail(opts: {
-  from: string;
-  to: string;
-  subject: string;
-  text?: string;
-  html?: string;
-}) {
-  const info = await mailTransport.sendMail(opts);
-  return info;
-}
-
-async function sendOrderToWorkMail(order: {
-  orderId: string;
-  customerName: string;
-  productName: string;
-  productDescription: string;
-  price: string;
-}) {
-  const to = process.env.WORKMAIL_TO || "info@codeco.tech";
-  const from = process.env.FROM_EMAIL || "info@codeco.tech";
-  const subject = "New Order Received - Codeco.tech";
-  const html = `
-    <h3>New order received</h3>
-    <p><strong>Order ID:</strong> ${order.orderId}</p>
-    <p><strong>Customer:</strong> ${order.customerName}</p>
-    <p><strong>Product:</strong> ${order.productName}</p>
-    <p><strong>Description:</strong> ${order.productDescription}</p>
-    <p><strong>Price:</strong> ${order.price}</p>
-  `;
-  await mailTransport.sendMail({ from, to, subject, html });
-}
 
 /* =========================
    STRIPE RAW BODY (MUST BE FIRST)
@@ -178,74 +132,35 @@ app.post("/paymentsuccess", async (req, res) => {
           { expiresIn: 604800 }
         );
 
-        // ========================
-        // EMAIL TEMPLATE (EXACT)
-        // ========================
-        const from = "info@codeco.tech";
-        const to = (session.customer_details?.email as string) || "info@codeco.tech";
-        const subject = "Your Order Confirmation Codeco.tech";
-        const text = `Codeco.tech`;
-
-        const customerName = session.customer_details?.name || "Unknown";
-        const productName: string = product.name || "Unknown Product";
-        const productDescription: string = product.description || "No description available";
-        const amountTotal: string = ((item.amount_total || 0) / 100).toFixed(2);
-        const url = signedUrl;
-
-        const content = `
-<head>
-<style>
-body { font-family: Arial, sans-serif; line-height: 1.5; }
-.container { padding: 20px; text-align: center; }
-.button { display: inline-block; padding: 10px 20px; color: #fff; background-color: #ff4f97; text-decoration: none; border-radius: 5px; }   .button, .button span {
-color: #fff !important; 
-}
-a.button:link, a.button:visited, a.button:hover, a.button:active {
-color: #fff !important;
-text-decoration: none !important;
-}
-</style>
-</head>
-<body>
-<div class="container">
-<h2>🎉 Thank you for your order, ${customerName}!</h2>
-<p>Product: <strong>${productName}</strong></p>
-<p>Description: ${productDescription}</p>
-<p>Total: £${amountTotal}</p>
-<p>Click below to download your file:</p>
-<a class="button" href="${url}" target="_blank">Download Now</a>
-<p>If you have any issues, reach out to us at info@codeco.tech</p>
-<p style="padding:7px; font-size: 18px; color: #444;">
-<span style="font-size: 20px; color: #444;">⏰  Download it now before it expires in 7 days!</span>
-</p>
-</div>
-</body>
-`;
-
-        const mailInfo = await sendMail({
-          from,
-          to,
-          subject,
-          text,
-          html: `<html>${content}</html>`
+        const tx = nodemailer.createTransport({
+          host: "email-smtp.eu-west-2.amazonaws.com",
+          port: 587,
+          secure: false,
+          requireTLS: true,
+          auth: {
+            user: process.env.AWS_SES_SMTP_USER!,
+            pass: process.env.AWS_SES_SMTP_PASSWORD!
+          }
         });
-        logger.info(
-          `✅ Email sent by paymentsuccess to: ${to} messageId: ${mailInfo?.messageId} accepted: ${mailInfo?.accepted} rejected: ${mailInfo?.rejected}`
-        );
 
-        const orderDetails = {
-          orderId: session.id,
-          customerName: session.customer_details?.name || "Unknown",
-          productName,
-          productDescription,
-          price: `£${amountTotal}`,
-        };
+        const customerName = session.customer_details?.name || "Customer";
+        const to = session.customer_details?.email || "info@codeco.tech";
+        const amount = ((item.amount_total || 0) / 100).toFixed(2);
 
-        await sendOrderToWorkMail(orderDetails);
-        logger.info(`✅ Order details sent to WorkMail: ${JSON.stringify(orderDetails)}`);
-        // ========================
-        // END EMAIL TEMPLATE
-        // ========================
+        await tx.sendMail({
+          from: process.env.FROM_EMAIL || "info@codeco.tech",
+          to,
+          subject: "Your Order Confirmation - Codeco.tech",
+          html: `
+            <h2>Thank you for your order, ${customerName}!</h2>
+            <p>Product: <strong>${product.name}</strong></p>
+            <p>Total: £${amount}</p>
+            <p>Download link (expires in 7 days):</p>
+            <a href="${signedUrl}" target="_blank">Download Now</a>
+          `
+        });
+
+        logger.info(`Order email sent to ${to}`);
       }
 
     } catch (err: any) {
